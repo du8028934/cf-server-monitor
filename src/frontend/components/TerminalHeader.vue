@@ -7,6 +7,42 @@
     </div>
     <div class="terminal-title">{{ title }}</div>
     <div class="terminal-header-controls">
+      <div class="theme-store-picker" v-if="!isAdminPage">
+        <button
+          ref="themePickerBtn"
+          type="button"
+          class="theme-store-picker-btn"
+          :disabled="loadingThemes"
+          aria-label="切换主题"
+          title="切换主题"
+          @click.stop="toggleThemePanel"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
+            <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
+            <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
+            <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+          </svg>
+        </button>
+        <Teleport to="body">
+          <div
+            v-if="themePanelOpen"
+            class="theme-store-picker-panel"
+            :style="themePanelStyle"
+            @click.stop
+          >
+            <button type="button" :class="{ active: selectedThemeId === 'builtin' }" @click="applyStoreTheme('builtin')">内置主题</button>
+            <button
+              v-for="theme in storeThemes"
+              :key="theme.id"
+              type="button"
+              :class="{ active: selectedThemeId === theme.id }"
+              @click="applyStoreTheme(theme.id)"
+            >{{ theme.title }}</button>
+          </div>
+        </Teleport>
+      </div>
       <div class="lang-toggle">
         <button 
           class="lang-btn" 
@@ -52,12 +88,15 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { t, setLanguage, getLanguage } from '../utils/i18n'
 import { useTheme } from '../composables/useTheme'
 import { DEFAULT_SITE_TITLE } from '../utils/constants'
 import { hasConfiguredApiBase } from '../utils/config'
+import http from '../utils/http'
+
+const PUBLIC_THEME_COOKIE = 'cfsm_public_theme'
 
 defineProps({
   title: {
@@ -71,6 +110,12 @@ const currentLang = ref('en')
 const route = useRoute()
 const isAdminPage = ref(route.path === '/admin')
 const adminHref = computed(() => hasConfiguredApiBase() ? '/#/admin' : '/admin#/admin')
+const storeThemes = ref([])
+const loadingThemes = ref(false)
+const selectedThemeId = ref('builtin')
+const themePanelOpen = ref(false)
+const themePickerBtn = ref(null)
+const themePanelStyle = ref({})
 
 const setLang = (lang) => {
   setLanguage(lang)
@@ -81,12 +126,92 @@ const handleLanguageChange = (e) => {
   currentLang.value = e.detail.lang
 }
 
+const readPublicThemeCookie = () => {
+  const prefix = `${PUBLIC_THEME_COOKIE}=`
+  const match = document.cookie.split(';').map(part => part.trim()).find(part => part.startsWith(prefix))
+  if (!match) return ''
+  try {
+    return decodeURIComponent(match.slice(prefix.length))
+  } catch (_) {
+    return ''
+  }
+}
+
+const getWorkerOrigin = () => {
+  if (import.meta.env.DEV && window.location.port === '5173') {
+    return String(import.meta.env.VITE_DEV_PROXY_TARGET || 'http://localhost:8787').replace(/\/$/, '')
+  }
+  return window.location.origin
+}
+
+const applyStoreTheme = (themeId) => {
+  selectedThemeId.value = String(themeId || 'builtin')
+  themePanelOpen.value = false
+  window.location.assign(`${getWorkerOrigin()}/?cfsm_theme=${encodeURIComponent(selectedThemeId.value)}`)
+}
+
+const positionThemePanel = () => {
+  const button = themePickerBtn.value
+  if (!button) return
+  const rect = button.getBoundingClientRect()
+  themePanelStyle.value = {
+    position: 'fixed',
+    top: `${Math.round(rect.bottom + 8)}px`,
+    right: `${Math.max(8, Math.round(window.innerWidth - rect.right))}px`,
+    left: 'auto',
+    zIndex: 10050
+  }
+}
+
+const toggleThemePanel = async () => {
+  themePanelOpen.value = !themePanelOpen.value
+  if (themePanelOpen.value) {
+    await nextTick()
+    positionThemePanel()
+  }
+}
+
+const handleDocumentClick = () => {
+  themePanelOpen.value = false
+}
+
 onMounted(() => {
   currentLang.value = getLanguage()
   window.addEventListener('languageChanged', handleLanguageChange)
+  document.addEventListener('click', handleDocumentClick)
+  window.addEventListener('resize', positionThemePanel)
+  window.addEventListener('scroll', positionThemePanel, true)
+
+  const onViteDev = import.meta.env.DEV && window.location.port === '5173'
+  if (!onViteDev) {
+    const cookieTheme = readPublicThemeCookie()
+    if (cookieTheme && cookieTheme !== 'builtin') {
+      selectedThemeId.value = cookieTheme
+    }
+  }
+
+  loadingThemes.value = true
+  http.get('/theme', { includeAuth: false, autoRedirect: false }).then((result) => {
+    const themes = Array.isArray(result.data?.themes) ? result.data.themes : []
+    storeThemes.value = themes
+      .map(theme => ({
+        id: String(theme?.id || '').trim(),
+        title: String(theme?.title || theme?.id || '').trim()
+      }))
+      .filter(theme => theme.id)
+
+    if (selectedThemeId.value !== 'builtin' && !storeThemes.value.some(theme => theme.id === selectedThemeId.value)) {
+      selectedThemeId.value = 'builtin'
+    }
+  }).finally(() => {
+    loadingThemes.value = false
+  })
 })
 
 onUnmounted(() => {
   window.removeEventListener('languageChanged', handleLanguageChange)
+  document.removeEventListener('click', handleDocumentClick)
+  window.removeEventListener('resize', positionThemePanel)
+  window.removeEventListener('scroll', positionThemePanel, true)
 })
 </script>

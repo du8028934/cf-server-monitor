@@ -239,6 +239,62 @@ body::before {
     padding: 3px;
 }
 
+.theme-store-picker {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.theme-store-picker-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.theme-store-picker-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--border-active);
+}
+
+.theme-store-picker-panel {
+    position: fixed;
+    z-index: 10050;
+    min-width: 180px;
+    max-height: 320px;
+    overflow: auto;
+    padding: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.theme-store-picker-panel button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.theme-store-picker-panel button:hover,
+.theme-store-picker-panel button.active {
+    background: var(--bg-hover);
+}
+
 .lang-btn {
     display: flex;
     align-items: center;

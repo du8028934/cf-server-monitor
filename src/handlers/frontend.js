@@ -13,10 +13,18 @@ import {
   injectApiBase
 } from '../utils/csp.js';
 import { checkAuth } from '../middleware/auth.js';
+import { normalizeThemeUrl, parseThemeUrl } from '../utils/themeUrl.js';
+import {
+  getPublicThemeCatalog,
+  resolvePublicThemeId,
+  resolvePublicThemeUrl
+} from './theme.js';
 
 const IMMUTABLE_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const PREVIEW_COOKIE = 'cfsm_theme_preview';
 const PREVIEW_AUTH_COOKIE = 'cfsm_theme_preview_auth';
+const PUBLIC_THEME_COOKIE = 'cfsm_public_theme';
+const PUBLIC_THEME_COOKIE_MAX_AGE = 365 * 24 * 60 * 60;
 
 let filesCache = null;
 
@@ -151,56 +159,6 @@ function getContentType(path) {
   return 'application/octet-stream';
 }
 
-function normalizeThemeUrl(value) {
-  const raw = String(value || '').trim();
-  if (!raw) return '';
-
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== 'https:' || url.hostname !== 'github.com') return '';
-    if (url.username || url.password || url.search || url.hash) return '';
-
-    const parts = url.pathname.split('/').filter(Boolean);
-    const ref = parts[3];
-    if (
-      parts.length < 4 ||
-      parts[2] !== 'tree' ||
-      !/^[A-Za-z0-9._-]+$/.test(parts[0]) ||
-      !/^[A-Za-z0-9._-]+$/.test(parts[1]) ||
-      !/^[A-Za-z0-9._-]+$/.test(ref) ||
-      parts.some(part => part === '.' || part === '..' || /[%\\]/.test(part))
-    ) {
-      return '';
-    }
-
-    return `https://github.com/${parts.join('/')}`;
-  } catch (_) {
-    return '';
-  }
-}
-
-function parseThemeUrl(themeUrl) {
-  const normalized = normalizeThemeUrl(themeUrl);
-  if (!normalized) return null;
-
-  const url = new URL(normalized);
-  const parts = url.pathname.split('/').filter(Boolean);
-  const owner = parts[0];
-  const repo = parts[1];
-  const ref = parts[3];
-  const themePathParts = parts.slice(4);
-  const encodedThemePath = [owner, repo, ref, ...themePathParts]
-    .map(part => encodeURIComponent(part))
-    .join('/');
-
-  return {
-    themeUrl: normalized,
-    ref,
-    rawBase: `https://raw.githubusercontent.com/${encodedThemePath}`,
-    cacheBase: `https://cfsm-theme-cache.local/${encodedThemePath}`
-  };
-}
-
 function isCommitRef(ref) {
   return /^[a-f0-9]{40}$/i.test(ref);
 }
@@ -245,6 +203,200 @@ function buildPreviewCookie(request, themeUrl) {
 function buildClearPreviewCookie(request) {
   const secure = new URL(request.url).protocol === 'https:' ? '; Secure' : '';
   return `${PREVIEW_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
+}
+
+function getPublicThemeIdFromCookie(request, catalog) {
+  const value = getCookie(request, PUBLIC_THEME_COOKIE);
+  if (!value) return '';
+  try {
+    return resolvePublicThemeId(decodeURIComponent(value), catalog);
+  } catch (_) {
+    return '';
+  }
+}
+
+function injectThemeSwitcher(html, catalog, selectedId) {
+  if (!html || /id=["']cfsm-theme-switcher["']/.test(html)) return html;
+
+  const options = [
+    { id: '', title: '站点默认' },
+    { id: 'builtin', title: '内置主题' },
+    ...(Array.isArray(catalog) ? catalog : []).map(theme => ({
+      id: theme.id,
+      title: theme.title
+    }))
+  ];
+
+  const panelItems = options.map(option => {
+    const active = option.id === selectedId ? ' is-active' : '';
+    return `<button type="button" class="cfsm-theme-item${active}" data-theme-id="${escapeHtml(option.id)}">${escapeHtml(option.title)}</button>`;
+  }).join('');
+
+  const widget = `<style id="cfsm-theme-switcher-style">
+#cfsm-theme-switcher{position:fixed;top:13px;right:auto;left:auto;z-index:2147483000;pointer-events:none;box-sizing:border-box;visibility:hidden}
+#cfsm-theme-switcher.is-fallback{visibility:visible;pointer-events:auto}
+#cfsm-theme-switcher-controls{position:relative;display:inline-flex;align-items:center;pointer-events:auto}
+#cfsm-theme-switcher-btn{width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid rgba(0,0,0,.12);background:inherit;color:inherit;cursor:pointer;box-sizing:border-box}
+#cfsm-theme-switcher-btn svg{width:16px;height:16px}
+#cfsm-theme-switcher-panel{display:none;position:fixed;z-index:2147483001;min-width:180px;max-height:min(70vh,360px);overflow:auto;padding:6px;border-radius:10px;border:1px solid rgba(0,0,0,.12);background:#fff;color:#111;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+#cfsm-theme-switcher-panel.is-open{display:flex;flex-direction:column;gap:2px}
+.cfsm-theme-item{display:block;width:100%;text-align:left;border:0;background:transparent;color:inherit;border-radius:6px;padding:8px 10px;font-size:13px;cursor:pointer}
+.cfsm-theme-item:hover,.cfsm-theme-item.is-active{background:rgba(0,0,0,.06)}
+@media (prefers-color-scheme: dark){
+  #cfsm-theme-switcher-panel{background:#16181d;color:#eee;border-color:rgba(255,255,255,.12)}
+  .cfsm-theme-item:hover,.cfsm-theme-item.is-active{background:rgba(255,255,255,.08)}
+}
+</style>
+<div id="cfsm-theme-switcher">
+  <div id="cfsm-theme-switcher-inner">
+    <div id="cfsm-theme-switcher-controls">
+      <button type="button" id="cfsm-theme-switcher-btn" aria-label="切换主题" title="切换主题">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+<div id="cfsm-theme-switcher-panel">${panelItems}</div>
+<script>
+(function(){
+  var btn=document.getElementById('cfsm-theme-switcher-btn');
+  var controls=document.getElementById('cfsm-theme-switcher-controls');
+  var wrap=document.getElementById('cfsm-theme-switcher');
+  var panel=document.getElementById('cfsm-theme-switcher-panel');
+  if(!btn||!controls||!panel)return;
+  function applyTheme(id){
+    var secure=location.protocol==='https:'?'; Secure':'';
+    document.cookie='${PUBLIC_THEME_COOKIE}='+encodeURIComponent(id||'')+'; Max-Age=${PUBLIC_THEME_COOKIE_MAX_AGE}; Path=/; SameSite=Lax'+secure;
+    location.reload();
+  }
+  function positionPanel(){
+    var rect=btn.getBoundingClientRect();
+    panel.style.top=(rect.bottom+8)+'px';
+    panel.style.right=Math.max(8, window.innerWidth-rect.right)+'px';
+    panel.style.left='auto';
+  }
+  function closePanel(){ panel.classList.remove('is-open'); }
+  function togglePanel(event){
+    event.preventDefault();
+    event.stopPropagation();
+    if(panel.classList.contains('is-open')){
+      closePanel();
+      return;
+    }
+    positionPanel();
+    panel.classList.add('is-open');
+  }
+  btn.addEventListener('click', togglePanel);
+  panel.addEventListener('click', function(event){
+    var item=event.target.closest('[data-theme-id]');
+    if(!item)return;
+    applyTheme(item.getAttribute('data-theme-id')||'');
+  });
+  document.addEventListener('click', function(event){
+    if(!panel.classList.contains('is-open'))return;
+    if(btn.contains(event.target)||panel.contains(event.target))return;
+    closePanel();
+  });
+  window.addEventListener('resize', function(){
+    if(panel.classList.contains('is-open'))positionPanel();
+    if(controls.dataset.placed!=='1')pinLeft();
+  });
+  function isOwn(el){
+    return !el||el===btn||el===controls||el===wrap||el===panel||(wrap&&wrap.contains(el))||(panel&&panel.contains(el))||(controls&&controls.contains(el));
+  }
+  function topRightIcons(){
+    var nodes=document.querySelectorAll('a,button,[data-slot="button"],.nav-icon-button,.title-btn');
+    var vw=window.innerWidth;
+    var items=[];
+    for(var i=0;i<nodes.length;i++){
+      var el=nodes[i];
+      if(isOwn(el))continue;
+      var r=el.getBoundingClientRect();
+      if(r.width<8||r.height<8||r.width>120||r.height>72)continue;
+      if(r.top<0||r.top>120||r.bottom<4)continue;
+      if(r.left<vw*0.35)continue;
+      items.push({el:el,rect:r,parent:el.parentElement});
+    }
+    items.sort(function(a,b){return a.rect.left-b.rect.left;});
+    return items;
+  }
+  function bestCluster(items){
+    if(!items.length)return null;
+    var groups=[];
+    for(var i=0;i<items.length;i++){
+      var parent=items[i].parent;
+      var group=null;
+      for(var g=0;g<groups.length;g++){
+        if(groups[g].parent===parent){group=groups[g];break;}
+      }
+      if(!group){
+        group={parent:parent,items:[]};
+        groups.push(group);
+      }
+      group.items.push(items[i]);
+    }
+    groups.sort(function(a,b){return b.items.length-a.items.length;});
+    var cluster=groups[0].items.slice().sort(function(a,b){return a.rect.left-b.rect.left;});
+    return {
+      parent:cluster[0].parent,
+      first:cluster[0].el,
+      left:cluster[0].rect.left,
+      top:cluster[0].rect.top,
+      height:cluster[0].rect.height
+    };
+  }
+  function pinLeft(){
+    if(!wrap||controls.dataset.placed==='1')return;
+    var cluster=bestCluster(topRightIcons());
+    wrap.classList.add('is-fallback');
+    wrap.style.visibility='visible';
+    wrap.style.pointerEvents='auto';
+    wrap.style.position='fixed';
+    wrap.style.right='auto';
+    var size=Math.max(22, Math.round(cluster&&cluster.height?cluster.height:36));
+    if(cluster){
+      wrap.style.top=Math.max(0, cluster.top+(cluster.height-size)/2)+'px';
+      wrap.style.left=Math.max(8, cluster.left-8-size)+'px';
+      return;
+    }
+    wrap.style.top='13px';
+    wrap.style.left='auto';
+    wrap.style.right='16px';
+  }
+  function restyleButton(host){
+    var sibling=host.querySelector('a[data-slot="button"],button[data-slot="button"],a.size-9,button.size-9,.nav-icon-button,.size-9,.title-btn');
+    if(!sibling||sibling===btn)return;
+    btn.className=sibling.className;
+  }
+  function place(){
+    if(controls.dataset.placed==='1')return true;
+    var cluster=bestCluster(topRightIcons());
+    if(!cluster||!cluster.parent||!cluster.first){
+      pinLeft();
+      return false;
+    }
+    cluster.parent.insertBefore(controls, cluster.first);
+    restyleButton(cluster.parent);
+    controls.dataset.placed='1';
+    if(wrap)wrap.style.display='none';
+    return true;
+  }
+  place();
+  var obs=new MutationObserver(function(){
+    if(place())obs.disconnect();
+  });
+  obs.observe(document.documentElement,{childList:true,subtree:true});
+  setTimeout(function(){
+    obs.disconnect();
+    if(controls.dataset.placed!=='1')pinLeft();
+  },8000);
+})();
+</script>`;
+
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `${widget}\n</body>`);
+  }
+  return `${html}\n${widget}`;
 }
 
 async function checkPreviewAuth(request, env, settings) {
@@ -399,8 +551,11 @@ async function loadThemeIndex(themeUrl) {
   return normalizeThemeAssetUrls(await response.text());
 }
 
-function buildHtmlResponse(html, settings, request, env = {}, previewThemeUrl = '') {
+function buildHtmlResponse(html, settings, request, env = {}, previewThemeUrl = '', switcher = null) {
   const rendered = injectAppearanceSettings(html, settings, env);
+  const pageHtml = switcher
+    ? injectThemeSwitcher(rendered.html, switcher.catalog, switcher.selectedId)
+    : rendered.html;
   const headers = new Headers({
     'Content-Type': 'text/html;charset=UTF-8',
     'X-Content-Type-Options': 'nosniff',
@@ -414,7 +569,7 @@ function buildHtmlResponse(html, settings, request, env = {}, previewThemeUrl = 
     headers.append('Set-Cookie', buildClearPreviewCookie(request));
   }
 
-  return new Response(rendered.html, { headers });
+  return new Response(pageHtml, { headers });
 }
 
 function buildThemeIndexErrorResponse() {
@@ -444,7 +599,27 @@ function buildPreviewUnauthorizedResponse(request, isAsset = false) {
   });
 }
 
-function resolveThemeUrlForAsset(request, settings) {
+function buildPublicThemeCookie(request, themeId) {
+  const secure = new URL(request.url).protocol === 'https:' ? '; Secure' : '';
+  if (!themeId) {
+    return `${PUBLIC_THEME_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
+  }
+  return `${PUBLIC_THEME_COOKIE}=${encodeURIComponent(themeId)}; Max-Age=${PUBLIC_THEME_COOKIE_MAX_AGE}; Path=/; SameSite=Lax${secure}`;
+}
+
+function redirectPublicThemePick(url, cookie) {
+  url.searchParams.delete('cfsm_theme');
+  const search = url.searchParams.toString();
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: `${url.pathname}${search ? `?${search}` : ''}` || '/',
+      'Set-Cookie': cookie
+    }
+  });
+}
+
+function resolveThemeUrlForPage(request, settings, catalog = []) {
   const url = new URL(request.url);
   const queryThemeUrl = getPreviewThemeUrlFromQuery(url);
   if (queryThemeUrl) {
@@ -454,6 +629,12 @@ function resolveThemeUrlForAsset(request, settings) {
   const cookieThemeUrl = getPreviewThemeUrlFromCookie(request);
   if (cookieThemeUrl) {
     return { themeUrl: cookieThemeUrl, preview: true };
+  }
+
+  const publicThemeId = getPublicThemeIdFromCookie(request, catalog);
+  if (publicThemeId) {
+    const resolved = resolvePublicThemeUrl(publicThemeId, catalog);
+    return { themeUrl: resolved.themeUrl, preview: false };
   }
 
   return {
@@ -474,8 +655,24 @@ export async function serveFrontend(request, env, settings = null) {
     settings = await loadSettings(env.DB);
   }
 
+  if (
+    request.method === 'GET' &&
+    url.searchParams.has('cfsm_theme') &&
+    !path.startsWith('/assets/') &&
+    !shouldUseBuiltinFrontend(path)
+  ) {
+    const catalog = await getPublicThemeCatalog();
+    const raw = String(url.searchParams.get('cfsm_theme') || '').trim();
+    const themeId = raw === 'builtin' ? 'builtin' : resolvePublicThemeId(raw, catalog);
+    return redirectPublicThemePick(url, buildPublicThemeCookie(request, themeId));
+  }
+
+  const catalog = await getPublicThemeCatalog();
+  const publicThemeId = getPublicThemeIdFromCookie(request, catalog);
+  const switcher = { catalog, selectedId: publicThemeId };
+
   if (request.method === 'GET' && path.startsWith('/assets/')) {
-    const resolvedTheme = resolveThemeUrlForAsset(request, settings);
+    const resolvedTheme = resolveThemeUrlForPage(request, settings, catalog);
     if (!resolvedTheme.themeUrl) {
       return new Response('Not Found', {
         status: 404,
@@ -489,8 +686,8 @@ export async function serveFrontend(request, env, settings = null) {
   }
 
   const previewThemeUrl = getPreviewThemeUrlFromQuery(url);
-  const configuredThemeUrl = normalizeThemeUrl(settings.theme_url);
-  const effectiveThemeUrl = previewThemeUrl || configuredThemeUrl;
+  const pageTheme = resolveThemeUrlForPage(request, settings, catalog);
+  const effectiveThemeUrl = previewThemeUrl || pageTheme.themeUrl;
 
   if (previewThemeUrl && !await checkPreviewAuth(request, env, settings)) {
     return buildPreviewUnauthorizedResponse(request);
@@ -499,7 +696,7 @@ export async function serveFrontend(request, env, settings = null) {
   if (!shouldUseBuiltinFrontend(path) && effectiveThemeUrl) {
     const themeHtml = await loadThemeIndex(effectiveThemeUrl);
     if (themeHtml) {
-      return buildHtmlResponse(themeHtml, settings, request, env, previewThemeUrl);
+      return buildHtmlResponse(themeHtml, settings, request, env, previewThemeUrl, switcher);
     }
     return buildThemeIndexErrorResponse();
   }
@@ -508,7 +705,7 @@ export async function serveFrontend(request, env, settings = null) {
   const html = files['dashboard.html'];
 
   if (html) {
-    return buildHtmlResponse(html, settings, request, env);
+    return buildHtmlResponse(html, settings, request, env, previewThemeUrl, null);
   }
 
   return new Response('Frontend not available. Please build the frontend first with `npm run build:frontend`.', {

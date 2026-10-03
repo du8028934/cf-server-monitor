@@ -34,5 +34,6 @@ new_sqlite_classes = ["MetricsBroadcaster"]
 
 # 开发服务器配置
 [dev]
+ip = "localhost"
 port = 8787
-local_protocol = "https"
+local_protocol = "http"

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url'
 import { parseCspOrigins, buildBackgroundStyle, injectTitle, injectApiBase, stripCspMeta } from './src/utils/csp.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'https://localhost:8787'
+const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'http://localhost:8787'
 
 const createWorkerProxy = () => ({
   target: devProxyTarget,
