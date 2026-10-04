@@ -2001,6 +2001,22 @@ body::before {
     white-space: nowrap;
 }
 
+.admin-copy-toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    z-index: 10060;
+    transform: translateX(-50%);
+    padding: 8px 16px;
+    background: var(--accent-green);
+    color: var(--bg-primary);
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+}
+
 /* --------------------------------------------------------------------------
    16. Server Card Grid & Group
    -------------------------------------------------------------------------- */

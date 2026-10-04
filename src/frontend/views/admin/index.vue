@@ -552,6 +552,13 @@
         </div>
       </div>
 
+      <div
+        v-if="copyToastVisible"
+        class="admin-copy-toast"
+        role="status"
+        aria-live="polite"
+      >✅ {{ trans.copied }}</div>
+
       <div v-if="alertMessage" class="modal-overlay active">
         <div class="modal-dialog">
           <div class="modal-header">
@@ -1094,6 +1101,17 @@ const deleteServerId = ref('')
 const copiedServerId = ref(null)
 const copiedNoteServerId = ref(null)
 const copiedSpecKey = ref(null)
+const copyToastVisible = ref(false)
+let copyToastTimer = null
+
+const showCopyToast = () => {
+  copyToastVisible.value = true
+  if (copyToastTimer) clearTimeout(copyToastTimer)
+  copyToastTimer = setTimeout(() => {
+    copyToastVisible.value = false
+    copyToastTimer = null
+  }, 1600)
+}
 const deleteTargetOs = ref('linux')
 const deleteVersion = ref('go')
 const deleteInstallMode = ref('current-user')
@@ -1196,6 +1214,7 @@ const copyServerNote = async (server) => {
       return
     }
     copiedNoteServerId.value = server.id
+    showCopyToast()
     setTimeout(() => {
       if (copiedNoteServerId.value === server.id) {
         copiedNoteServerId.value = null
@@ -1217,6 +1236,7 @@ const copyServerSpec = async ({ key, text } = {}) => {
       return
     }
     copiedSpecKey.value = key
+    showCopyToast()
     setTimeout(() => {
       if (copiedSpecKey.value === key) {
         copiedSpecKey.value = null

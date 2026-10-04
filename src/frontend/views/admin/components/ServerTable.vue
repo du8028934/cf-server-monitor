@@ -110,13 +110,13 @@
                   :class="{ 'spec-copied': isSpecCopied(server, ipItem.copyField) }"
                   role="button"
                   tabindex="0"
-                  :title="trans.clickToCopyIp"
-                  :aria-label="trans.clickToCopyIp"
+                  :title="isSpecCopied(server, ipItem.copyField) ? trans.copied : trans.clickToCopyIp"
+                  :aria-label="isSpecCopied(server, ipItem.copyField) ? trans.copied : trans.clickToCopyIp"
                   @click.stop="emitCopySpec(server, ipItem.copyField, ipItem.address)"
                   @keydown.enter.prevent="emitCopySpec(server, ipItem.copyField, ipItem.address)"
                   @keydown.space.prevent="emitCopySpec(server, ipItem.copyField, ipItem.address)"
                 >
-                  <span class="server-ip-value">{{ ipItem.address }}</span>
+                  <span class="server-ip-value">{{ isSpecCopied(server, ipItem.copyField) ? trans.copied : ipItem.address }}</span>
                 </span>
               </div>
               <span v-else>-</span>
