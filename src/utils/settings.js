@@ -26,9 +26,10 @@ export const RESOURCE_ALERT_WINDOW_MAX = 10;
 export const RESOURCE_ALERT_MODE_CONTINUOUS = 'continuous';
 export const RESOURCE_ALERT_MODE_AVERAGE = 'average';
 export const RESOURCE_ALERT_RULES_MAX = 20;
-export const DEFAULT_NOTIFICATION_TEMPLATE = '{{emoji}}【CF Server Monitor】{{event}}\n\n{{message}}\n\n{{time}}';
+export const DEFAULT_NOTIFICATION_TEMPLATE = '{{emoji}} {{event}}\n----------------------\n🕒 时间: {{time}}\n{{message}}\n----------------------';
 export const DEFAULT_NOTIFICATION_WEBHOOK_BODY = '{\n  "title": "{{emoji}} {{event}}",\n  "content": "{{notification}}"\n}';
 const LEGACY_DEFAULT_NOTIFICATION_TEMPLATES = [
+  '{{emoji}}【CF Server Monitor】{{event}}\n\n{{message}}\n\n{{time}}',
   '{{emoji}}【CF Server Monitor】{{event}}\n\n{{message}}\n\n时间: {{time}}',
   '{{emoji}}【CF Server Monitor】{{event}}\n服务器: {{client}}\n详情:\n{{message}}\n时间: {{time}}',
   '事件: {{event}}\n服务名: {{client}}\n消息: {{message}}\n时间: {{time}}',

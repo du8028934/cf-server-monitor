@@ -70,7 +70,7 @@ function formatNotificationTime(timestamp = Date.now(), settings = {}) {
   const parts = getZonedDateParts(timestamp, settings?.notification_timezone);
   if (!parts) return '无效时间';
   const pad = value => String(value).padStart(2, '0');
-  return `${Number(parts.year)}/${Number(parts.month)}/${Number(parts.day)} ` +
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)} ` +
     `${pad(parts.hour)}:${pad(parts.minute)}:${pad(parts.second)}`;
 }
 
@@ -1084,7 +1084,7 @@ export async function checkOfflineNodes(db) {
 
     if (offlineNodes.length > 0) {
       const nodeList = offlineNodes
-        .map(n => `${n.name}  最后上报: ${formatLastReportTime(n.lastReportTime, siteSettings)}`)
+        .map(n => `🖥️ 节点: ${n.name}\n📡 最后上报: ${formatLastReportTime(n.lastReportTime, siteSettings)}`)
         .join('\n');
       const msg = nodeList;
       await sendNotification(siteSettings, msg, {
@@ -1097,7 +1097,7 @@ export async function checkOfflineNodes(db) {
     }
 
     if (recoveredNodes.length > 0) {
-      const nodeList = recoveredNodes.map(n => n.name).join('\n');
+      const nodeList = recoveredNodes.map(n => `🖥️ 节点: ${n.name}`).join('\n');
       const msg = nodeList;
       await sendNotification(siteSettings, msg, {
         event: '节点恢复通知',

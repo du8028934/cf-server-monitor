@@ -477,7 +477,7 @@
               v-model="settings.notification_template"
               class="form-textarea"
               rows="5"
-              placeholder="{{emoji}}【CF Server Monitor】{{event}}\n\n{{message}}\n\n{{time}}"
+              placeholder="{{emoji}} {{event}}\n----------------------\n🕒 时间: {{time}}\n{{message}}\n----------------------"
             ></textarea>
           </div>
         </div>

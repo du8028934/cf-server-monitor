@@ -888,12 +888,14 @@ test('resource alert notification payloads group metrics by server and split lon
 });
 
 test('legacy default notification template normalizes to concise default', () => {
+  const previousDefault = '{{emoji}}【CF Server Monitor】{{event}}\n\n{{message}}\n\n{{time}}';
   const legacy = '{{emoji}}【CF Server Monitor】{{event}}\n服务器: {{client}}\n详情:\n{{message}}\n时间: {{time}}';
   const previousConcise = '{{emoji}}【CF Server Monitor】{{event}}\n\n{{message}}\n\n时间: {{time}}';
+  assert.equal(normalizeNotificationTemplate(previousDefault), DEFAULT_NOTIFICATION_TEMPLATE);
   assert.equal(normalizeNotificationTemplate(legacy), DEFAULT_NOTIFICATION_TEMPLATE);
   assert.equal(normalizeNotificationTemplate(previousConcise), DEFAULT_NOTIFICATION_TEMPLATE);
-  assert.equal(DEFAULT_NOTIFICATION_TEMPLATE.includes('服务器:'), false);
-  assert.equal(DEFAULT_NOTIFICATION_TEMPLATE.includes('时间:'), false);
+  assert.equal(DEFAULT_NOTIFICATION_TEMPLATE.includes('【CF Server Monitor】'), false);
+  assert.equal(DEFAULT_NOTIFICATION_TEMPLATE.includes('🕒 时间: {{time}}'), true);
   assert.equal(DEFAULT_NOTIFICATION_TEMPLATE.includes('{{message}}'), true);
 });
 
