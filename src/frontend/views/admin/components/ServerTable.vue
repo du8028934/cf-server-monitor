@@ -108,7 +108,13 @@
                   :key="ipItem.copyField"
                   class="server-ip-line"
                   :class="{ 'spec-copied': isSpecCopied(server, ipItem.copyField) }"
+                  role="button"
+                  tabindex="0"
+                  :title="trans.clickToCopyIp"
+                  :aria-label="trans.clickToCopyIp"
                   @click.stop="emitCopySpec(server, ipItem.copyField, ipItem.address)"
+                  @keydown.enter.prevent="emitCopySpec(server, ipItem.copyField, ipItem.address)"
+                  @keydown.space.prevent="emitCopySpec(server, ipItem.copyField, ipItem.address)"
                 >
                   <span class="server-ip-value">{{ ipItem.address }}</span>
                 </span>

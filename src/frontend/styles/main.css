@@ -1988,6 +1988,12 @@ body::before {
     cursor: pointer;
 }
 
+.server-ip-line:hover .server-ip-value {
+    color: var(--accent-green);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 .server-ip-value {
     min-width: 0;
     overflow: hidden;
