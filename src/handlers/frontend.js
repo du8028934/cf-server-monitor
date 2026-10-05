@@ -236,8 +236,9 @@ function injectThemeSwitcher(html, catalog, selectedId) {
 #cfsm-theme-switcher{position:fixed;top:13px;right:auto;left:auto;z-index:2147483000;pointer-events:none;box-sizing:border-box;visibility:hidden}
 #cfsm-theme-switcher.is-fallback{visibility:visible;pointer-events:auto}
 #cfsm-theme-switcher-controls{position:relative;display:inline-flex;align-items:center;pointer-events:auto}
-#cfsm-theme-switcher-btn{width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid rgba(0,0,0,.12);background:inherit;color:inherit;cursor:pointer;box-sizing:border-box}
-#cfsm-theme-switcher-btn svg{width:16px;height:16px}
+#cfsm-theme-switcher-btn{padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-sizing:border-box;appearance:none;-webkit-appearance:none}
+#cfsm-theme-switcher-btn svg{width:16px;height:16px;pointer-events:none;flex:none}
+#cfsm-theme-switcher-btn:not([data-themed]){width:36px;height:36px;border:1px solid color-mix(in srgb,currentColor 28%,transparent);border-radius:999px;background:color-mix(in srgb,currentColor 8%,transparent)}
 #cfsm-theme-switcher-panel{display:none;position:fixed;z-index:2147483001;min-width:180px;max-height:min(70vh,360px);overflow:auto;padding:6px;border-radius:10px;border:1px solid rgba(0,0,0,.12);background:#fff;color:#111;box-shadow:0 10px 30px rgba(0,0,0,.18)}
 #cfsm-theme-switcher-panel.is-open{display:flex;flex-direction:column;gap:2px}
 .cfsm-theme-item{display:block;width:100%;text-align:left;border:0;background:transparent;color:inherit;border-radius:6px;padding:8px 10px;font-size:13px;cursor:pointer}
@@ -251,7 +252,7 @@ function injectThemeSwitcher(html, catalog, selectedId) {
   <div id="cfsm-theme-switcher-inner">
     <div id="cfsm-theme-switcher-controls">
       <button type="button" id="cfsm-theme-switcher-btn" aria-label="切换主题" title="切换主题">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74z"/><path d="m20 14.37-8.5 4.87a2 2 0 0 1-2 0L2.5 14.37"/><path d="m20 18.37-8.5 4.87a2 2 0 0 1-2 0L2.5 18.37"/></svg>
       </button>
     </div>
   </div>
@@ -355,6 +356,7 @@ function injectThemeSwitcher(html, catalog, selectedId) {
     wrap.style.right='auto';
     var size=Math.max(22, Math.round(cluster&&cluster.height?cluster.height:36));
     if(cluster){
+      restyleButton(cluster.first);
       wrap.style.top=Math.max(0, cluster.top+(cluster.height-size)/2)+'px';
       wrap.style.left=Math.max(8, cluster.left-8-size)+'px';
       return;
@@ -363,10 +365,28 @@ function injectThemeSwitcher(html, catalog, selectedId) {
     wrap.style.left='auto';
     wrap.style.right='16px';
   }
-  function restyleButton(host){
-    var sibling=host.querySelector('a[data-slot="button"],button[data-slot="button"],a.size-9,button.size-9,.nav-icon-button,.size-9,.title-btn');
-    if(!sibling||sibling===btn)return;
-    btn.className=sibling.className;
+  function iconCandidate(el){
+    if(!el||isOwn(el))return false;
+    var tag=(el.tagName||'').toLowerCase();
+    if(tag!=='button'&&tag!=='a')return false;
+    var r=el.getBoundingClientRect();
+    return r.width>=18&&r.width<=64&&r.height>=18&&r.height<=64;
+  }
+  function restyleButton(from){
+    var sibling=from;
+    if(!iconCandidate(sibling)&&from&&from.querySelector){
+      var nodes=from.querySelectorAll('a,button');
+      sibling=null;
+      for(var i=0;i<nodes.length;i++){
+        if(iconCandidate(nodes[i])){sibling=nodes[i];break;}
+      }
+    }
+    if(!sibling)return;
+    var cls=sibling.className;
+    if(cls&&typeof cls==='object')cls=cls.baseVal||'';
+    cls=String(cls||'').split(/\s+/).filter(function(c){return c&&c!=='is-active'&&c!=='control-toggle';}).join(' ');
+    if(cls) btn.className=cls;
+    btn.setAttribute('data-themed','1');
   }
   function place(){
     if(controls.dataset.placed==='1')return true;
@@ -376,7 +396,7 @@ function injectThemeSwitcher(html, catalog, selectedId) {
       return false;
     }
     cluster.parent.insertBefore(controls, cluster.first);
-    restyleButton(cluster.parent);
+    restyleButton(cluster.first);
     controls.dataset.placed='1';
     if(wrap)wrap.style.display='none';
     return true;
