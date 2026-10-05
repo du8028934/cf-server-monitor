@@ -173,6 +173,7 @@ import { adminApi } from '../../../utils/api'
 import { normalizeDisplayMode } from '../../../utils/displayMode'
 import { isMikusThemeEnabled } from '../../../utils/themeOptions'
 import { APPEARANCE_FIELDS } from '../../../../utils/settings'
+import { mergeLocalThemeStore } from '../../../../utils/localThemes.js'
 
 const props = defineProps({
   trans: { type: Object, required: true },
@@ -309,7 +310,7 @@ const loadThemes = async () => {
   error.value = ''
   try {
     const themeStore = await fetchThemeStore()
-    themes.value = themeStore.themes
+    themes.value = mergeLocalThemeStore(themeStore).themes
     
     // 初始化选中版本为最新版本（索引0）
     initSelectedVersions(true)

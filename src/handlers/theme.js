@@ -2,6 +2,7 @@ import {
   THEME_STORE_CACHE_TTL_SECONDS,
   THEME_STORE_URL
 } from '../utils/config.js'
+import { mergeLocalThemeStore } from '../utils/localThemes.js'
 import { normalizeThemeUrl } from '../utils/themeUrl.js'
 
 const THEME_ID_RE = /^[A-Za-z0-9._-]{1,64}$/
@@ -36,16 +37,24 @@ export async function handleTheme() {
     })
 
     if (!res.ok) {
+      const localOnly = mergeLocalThemeStore(createEmptyThemeStore())
+      if (localOnly.themes.length) {
+        return { ok: true, themeStore: localOnly, cached: false }
+      }
       return { ok: false, status: res.status, error: 'themeStoreProxyFailed' }
     }
 
     const data = await res.json()
-    const themeStore = normalizeThemeStore(data)
+    const themeStore = mergeLocalThemeStore(normalizeThemeStore(data))
 
     cachedThemeStore = themeStore
     cacheTime = now
     return { ok: true, themeStore, cached: false }
   } catch (e) {
+    const localOnly = mergeLocalThemeStore(createEmptyThemeStore())
+    if (localOnly.themes.length) {
+      return { ok: true, themeStore: localOnly, cached: false }
+    }
     return { ok: false, status: 0, error: 'themeStoreProxyFailed' }
   }
 }
